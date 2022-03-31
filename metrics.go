@@ -9,6 +9,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	webserver "github.com/randlabs/go-webserver"
+	"github.com/randlabs/go-webserver/middleware"
 )
 
 // -----------------------------------------------------------------------------
@@ -37,6 +38,12 @@ type Options struct {
 
 	// HealthCallback indicates a function that returns an object that will be returned as a JSON output.
 	HealthCallback HealthCallback
+
+	// Include Cache-Control headers in response.
+	IncludeNoCache bool
+
+	// Include CORS headers in response.
+	IncludeCORS    bool
 }
 
 // HealthCallback indicates a function that returns an object that will be returned as a JSON output.
@@ -60,6 +67,7 @@ func CreateMetricsWebServer(opts Options) (*MetricsWebServer, error) {
 
 	// Create webserver
 	mws.httpsrv, err = webserver.Create(webserver.Options{
+		Name:              "metrics-server",
 		Address:           opts.Address,
 		Port:              opts.Port,
 		EnableCompression: false,
@@ -77,10 +85,18 @@ func CreateMetricsWebServer(opts Options) (*MetricsWebServer, error) {
 		return nil, err
 	}
 
+	// Add middlewares
+	if opts.IncludeNoCache {
+		mws.httpsrv.Use(middleware.DisableCacheControl())
+	}
+	if opts.IncludeCORS {
+		mws.httpsrv.Use(middleware.DefaultCORS())
+	}
+
 	// Add webserver handlers
-	mws.httpsrv.Router.GET("/health", mws.protectedHandler(mws.getHealthHandler()))
-	mws.httpsrv.Router.GET("/metrics", mws.protectedHandler(mws.getMetricsHandler()))
-	mws.httpsrv.AddProfilerHandlers("/debug/pprof", mws.checkAccessToken)
+	mws.httpsrv.GET("/health", mws.protectedHandler(mws.getHealthHandler()))
+	mws.httpsrv.GET("/metrics", mws.protectedHandler(mws.getMetricsHandler()))
+	mws.httpsrv.ServeDebugProfiler("/debug/pprof", mws.checkAccessToken)
 
 	// Done
 	return &mws, nil
