@@ -5,13 +5,13 @@ import (
 	"strings"
 
 	webserver "github.com/randlabs/go-webserver"
-	"github.com/valyala/fasthttp"
+	"github.com/randlabs/go-webserver/request"
 )
 
 // -----------------------------------------------------------------------------
 // Private methods
 
-func (mws *MetricsWebServer) checkAccessToken(ctx *webserver.RequestCtx) bool {
+func (mws *MetricsWebServer) checkAccessToken(req *request.RequestContext) bool {
 	if len(mws.accessToken) == 0 {
 		return true
 	}
@@ -19,14 +19,14 @@ func (mws *MetricsWebServer) checkAccessToken(ctx *webserver.RequestCtx) bool {
 	var token []byte
 
 	// Get X-Access-Token header
-	header := ctx.Request.Header.Peek("X-Access-Token")
+	header := req.RequestHeader("X-Access-Token")
 	if len(header) > 0 {
-		token = header
+		token = []byte(header)
 	} else {
 		// If no token provided, try with Authorization: Bearer XXX header
-		header = ctx.Request.Header.Peek("Authorization")
+		header = req.RequestHeader("Authorization")
 		if len(header) > 0 {
-			auth := strings.SplitN(string(header), " ", 2)
+			auth := strings.SplitN(header, " ", 2)
 			if len(auth) == 2 && strings.EqualFold("Bearer", auth[0]) {
 				token = []byte(auth[1])
 			}
@@ -42,15 +42,13 @@ func (mws *MetricsWebServer) checkAccessToken(ctx *webserver.RequestCtx) bool {
 	return false
 }
 
-func (mws *MetricsWebServer) protectedHandler(handler fasthttp.RequestHandler) fasthttp.RequestHandler {
-	return func(ctx *fasthttp.RequestCtx) {
+func (mws *MetricsWebServer) protectedHandler(handler webserver.HandlerFunc) webserver.HandlerFunc {
+	return func(req *request.RequestContext) error {
 		// Check access token
-		if mws.checkAccessToken(ctx) {
-			handler(ctx)
-		} else {
-			webserver.EnableCORS(ctx)
-			webserver.DisableCache(ctx)
-			webserver.SendAccessDenied(ctx, "403 forbidden")
+		if !mws.checkAccessToken(req) {
+			req.AccessDenied("403 forbidden")
+			return nil
 		}
+		return handler(req)
 	}
 }

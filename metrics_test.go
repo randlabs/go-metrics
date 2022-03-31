@@ -1,4 +1,4 @@
-package metrics
+package metrics_test
 
 import (
 	"fmt"
@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/randlabs/go-metrics"
 )
 
 // -----------------------------------------------------------------------------
@@ -23,12 +25,12 @@ type State struct {
 
 func TestWebServer(t *testing.T) {
 	// CreateMetricsWebServer initializes and creates a new web server
-	srvOpts := Options{
+	srvOpts := metrics.Options{
 		Address:        "127.0.0.1",
 		Port:           3000,
 		HealthCallback: healthCallback,
 	}
-	mws, err := CreateMetricsWebServer(srvOpts)
+	mws, err := metrics.CreateMetricsWebServer(srvOpts)
 	if err != nil {
 		t.Errorf("unable to create web server [%v]", err)
 		return
@@ -44,7 +46,7 @@ func TestWebServer(t *testing.T) {
 	if err == nil {
 		err = mws.CreateCounterVecWithCallback(
 			"random_counter_vec", "A random counter vector", []string{"set", "value"},
-			VectorMetric{
+			metrics.VectorMetric{
 				{
 					Values: []string{"Set A", "Value 1"},
 					Handler: func() float64 {
@@ -70,7 +72,7 @@ func TestWebServer(t *testing.T) {
 	if err == nil {
 		err = mws.CreateGaugeVecWithCallback(
 			"random_gauge_vec", "A random gauge vector", []string{"set", "value"},
-			VectorMetric{
+			metrics.VectorMetric{
 				{
 					Values: []string{"Set A", "Value 1"},
 					Handler: func() float64 {
