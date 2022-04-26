@@ -61,5 +61,5 @@ func healthCallback() interface{} {
 }
 ```
 
-## Lincese
+## License
 See `LICENSE` file for details.
