@@ -8,7 +8,7 @@ import (
 
 // -----------------------------------------------------------------------------
 
-func (mws *MetricsWebServer) getHealthHandler() webserver.HandlerFunc {
+func (mws *Controller) getHealthHandler() webserver.HandlerFunc {
 	return func(req *request.RequestContext) error {
 		// Get current state from callback
 		state := mws.healthCallback()
@@ -22,7 +22,7 @@ func (mws *MetricsWebServer) getHealthHandler() webserver.HandlerFunc {
 	}
 }
 
-func (mws *MetricsWebServer) getMetricsHandler() webserver.HandlerFunc {
+func (mws *Controller) getMetricsHandler() webserver.HandlerFunc {
 	return webserver.HandlerFromHttpHandler(promhttp.HandlerFor(
 		mws.registry,
 		promhttp.HandlerOpts{

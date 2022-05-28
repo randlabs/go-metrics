@@ -10,24 +10,29 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	webserver "github.com/randlabs/go-webserver"
 	"github.com/randlabs/go-webserver/middleware"
+	rp "github.com/randlabs/rundown-protection"
 )
 
 // -----------------------------------------------------------------------------
 
-// MetricsWebServer is the metrics web server object
-type MetricsWebServer struct {
-	httpsrv        *webserver.Server
-	registry       *prometheus.Registry
-	healthCallback HealthCallback
-	accessToken    []byte
+// Controller holds details about a metrics monitor instance.
+type Controller struct {
+	rundownProt         *rp.RundownProtection
+	server              *webserver.Server
+	usingInternalServer bool
+	registry            *prometheus.Registry
+	healthCallback      HealthCallback
 }
 
-// Options specifies metrics web server initialization options.
+// Options specifies metrics controller initialization options.
 type Options struct {
-	// Address is the bind address to attach the server listener.
+	// If Server is provided, use this server instead of creating a new one.
+	Server *webserver.Server
+
+	// Address is the bind address to attach the internal web server.
 	Address string
 
-	// Port is the port number the server will listen.
+	// Port is the port number the internal web server will use.
 	Port uint16
 
 	// TLSConfig optionally provides a TLS configuration for use.
@@ -36,14 +41,23 @@ type Options struct {
 	// AccessToken is an optional access token required to access the status endpoints.
 	AccessToken string
 
-	// HealthCallback indicates a function that returns an object that will be returned as a JSON output.
+	// If RequestAccessTokenInHealth is enabled, access token checked also in '/health' endpoint.
+	RequestAccessTokenInHealth bool
+
+	// HealthCallback is a function that returns an object which, in turn, will be converted to JSON format.
 	HealthCallback HealthCallback
 
-	// Include Cache-Control headers in response.
-	IncludeNoCache bool
+	// Expose debugging profiles /debug/pprof endpoint.
+	EnableDebugProfiles bool
+
+	// Include Cache-Control headers in response to disable client-side caching.
+	DisableClientCache bool
 
 	// Include CORS headers in response.
-	IncludeCORS    bool
+	IncludeCORS bool
+
+	// Middlewares additional set of middlewares for the endpoints.
+	Middlewares []webserver.MiddlewareFunc
 }
 
 // HealthCallback indicates a function that returns an object that will be returned as a JSON output.
@@ -51,8 +65,8 @@ type HealthCallback func() interface{}
 
 // -----------------------------------------------------------------------------
 
-// CreateMetricsWebServer initializes and creates a new web server
-func CreateMetricsWebServer(opts Options) (*MetricsWebServer, error) {
+// CreateController initializes and creates a new controller
+func CreateController(opts Options) (*Controller, error) {
 	var err error
 
 	if opts.HealthCallback == nil {
@@ -60,79 +74,104 @@ func CreateMetricsWebServer(opts Options) (*MetricsWebServer, error) {
 	}
 
 	// Create metrics object
-	mws := MetricsWebServer{
+	mws := Controller{
+		rundownProt:    rp.Create(),
 		healthCallback: opts.HealthCallback,
-		accessToken:    []byte(opts.AccessToken),
 	}
 
 	// Create webserver
-	mws.httpsrv, err = webserver.Create(webserver.Options{
-		Name:              "metrics-server",
-		Address:           opts.Address,
-		Port:              opts.Port,
-		EnableCompression: false,
-		TLSConfig:         opts.TLSConfig,
-	})
-	if err != nil {
-		mws.Stop()
-		return nil, fmt.Errorf("unable to create metrics web server [err=%v]", err)
+	if opts.Server != nil {
+		mws.server = opts.Server
+	} else {
+		mws.usingInternalServer = true
+		mws.server, err = webserver.Create(webserver.Options{
+			Name:              "metrics-server",
+			Address:           opts.Address,
+			Port:              opts.Port,
+			EnableCompression: false,
+			TLSConfig:         opts.TLSConfig,
+		})
+		if err != nil {
+			mws.Destroy()
+			return nil, fmt.Errorf("unable to create metrics web server [err=%v]", err)
+		}
 	}
 
 	// Create Prometheus handler
 	err = mws.createPrometheusRegistry()
 	if err != nil {
-		mws.Stop()
+		mws.Destroy()
 		return nil, err
 	}
 
 	// Add middlewares
-	if opts.IncludeNoCache {
-		mws.httpsrv.Use(middleware.DisableCacheControl())
+	middlewares := make([]webserver.MiddlewareFunc, 0)
+	if len(opts.Middlewares) > 0 {
+		middlewares = append(middlewares, opts.Middlewares...)
+	}
+	middlewares = append(middlewares, mws.createAliveMiddleware())
+	if opts.DisableClientCache {
+		middlewares = append(middlewares, middleware.DisableClientCache())
 	}
 	if opts.IncludeCORS {
-		mws.httpsrv.Use(middleware.DefaultCORS())
+		middlewares = append(middlewares, middleware.DefaultCORS())
 	}
 
-	// Add webserver handlers
-	mws.httpsrv.GET("/health", mws.protectedHandler(mws.getHealthHandler()))
-	mws.httpsrv.GET("/metrics", mws.protectedHandler(mws.getMetricsHandler()))
-	mws.httpsrv.ServeDebugProfiler("/debug/pprof", mws.checkAccessToken)
+	// Create middlewares with authorization
+	middlewaresWithAuth := make([]webserver.MiddlewareFunc, len(middlewares))
+	copy(middlewaresWithAuth, middlewares)
+	if len(opts.AccessToken) > 0 {
+		middlewaresWithAuth = append(middlewaresWithAuth, middleware.ProtectedWithToken(opts.AccessToken))
+	}
+
+	// Add health handler to web server
+	if opts.RequestAccessTokenInHealth {
+		mws.server.GET("/health", mws.getHealthHandler(), middlewaresWithAuth...)
+	} else {
+		mws.server.GET("/health", mws.getHealthHandler(), middlewares...)
+	}
+
+	// Add metrics handler to web server
+	mws.server.GET("/metrics", mws.getMetricsHandler(), middlewaresWithAuth...)
+
+	// Add debug profiles handler to web server
+	if opts.EnableDebugProfiles {
+		mws.server.ServeDebugProfiles("/debug/pprof", middlewaresWithAuth...)
+	}
 
 	// Done
 	return &mws, nil
 }
 
-// Start starts the metrics web server
-func (mws *MetricsWebServer) Start() error {
-	if mws.httpsrv == nil {
-		return errors.New("metrics webserver not initialized")
+// Start starts the monitor's internal web server
+func (mws *Controller) Start() error {
+	if mws.server == nil {
+		return errors.New("metrics monitor web server not initialized")
 	}
-	return mws.httpsrv.Start()
+	if !mws.usingInternalServer {
+		return errors.New("cannot start an external web server")
+	}
+	return mws.server.Start()
 }
 
-// Stop shuts down the metrics web server
-func (mws *MetricsWebServer) Stop() {
-	// Stop web server
-	if mws.httpsrv != nil {
-		mws.httpsrv.Stop()
-		mws.httpsrv = nil
+// Destroy destroys the monitor and stops the internal web server
+func (mws *Controller) Destroy() {
+	// Initiate shutdown
+	mws.rundownProt.Wait()
+
+	// Cleanup
+	if mws.server != nil {
+		// Stop the internal web server if running
+		if mws.usingInternalServer {
+			mws.server.Stop()
+		}
+		mws.server = nil
 	}
 	mws.registry = nil
-
-	mws.cleanAccessToken()
 	mws.healthCallback = nil
 }
 
 // Registry returns the prometheus registry object
-func (mws *MetricsWebServer) Registry() *prometheus.Registry {
+func (mws *Controller) Registry() *prometheus.Registry {
 	return mws.registry
-}
-
-// -----------------------------------------------------------------------------
-
-func (mws *MetricsWebServer) cleanAccessToken() {
-	tokenLen := len(mws.accessToken)
-	for idx := 0; idx < tokenLen; idx++ {
-		mws.accessToken[idx] = 0
-	}
 }

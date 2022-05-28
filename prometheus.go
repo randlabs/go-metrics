@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/collectors"
 	dto "github.com/prometheus/client_model/go"
 	"google.golang.org/protobuf/proto"
 )
@@ -20,7 +19,7 @@ type VectorMetric []struct {
 
 // -----------------------------------------------------------------------------
 
-func (mws *MetricsWebServer) CreateCounterWithCallback(name string, help string, handler ValueHandler) error {
+func (mws *Controller) CreateCounterWithCallback(name string, help string, handler ValueHandler) error {
 	coll := prometheus.NewCounterFunc(
 		prometheus.CounterOpts{
 			Name: name,
@@ -31,7 +30,7 @@ func (mws *MetricsWebServer) CreateCounterWithCallback(name string, help string,
 	return mws.registry.Register(coll)
 }
 
-func (mws *MetricsWebServer) CreateCounterVecWithCallback(
+func (mws *Controller) CreateCounterVecWithCallback(
 	name string, help string, variableLabels []string, subItems VectorMetric,
 ) error {
 	desc := prometheus.NewDesc(
@@ -67,7 +66,7 @@ func (mws *MetricsWebServer) CreateCounterVecWithCallback(
 	return mws.registry.Register(coll)
 }
 
-func (mws *MetricsWebServer) CreateGaugeWithCallback(name string, help string, handler ValueHandler) error {
+func (mws *Controller) CreateGaugeWithCallback(name string, help string, handler ValueHandler) error {
 	coll := prometheus.NewGaugeFunc(
 		prometheus.GaugeOpts{
 			Name: name,
@@ -78,7 +77,7 @@ func (mws *MetricsWebServer) CreateGaugeWithCallback(name string, help string, h
 	return mws.registry.Register(coll)
 }
 
-func (mws *MetricsWebServer) CreateGaugeVecWithCallback(
+func (mws *Controller) CreateGaugeVecWithCallback(
 	name string, help string, variableLabels []string, subItems VectorMetric,
 ) error {
 	desc := prometheus.NewDesc(
@@ -112,27 +111,4 @@ func (mws *MetricsWebServer) CreateGaugeVecWithCallback(
 		coll.metrics = append(coll.metrics, m)
 	}
 	return mws.registry.Register(coll)
-}
-
-// -----------------------------------------------------------------------------
-// Private methods
-
-func (mws *MetricsWebServer) createPrometheusRegistry() error {
-	// Create registry
-	mws.registry = prometheus.NewRegistry()
-
-	// Add Golang specific collectors
-	err := mws.registry.Register(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
-	if err != nil {
-		mws.registry = nil
-		return err
-	}
-	err = mws.registry.Register(collectors.NewGoCollector())
-	if err != nil {
-		mws.registry = nil
-		return err
-	}
-
-	// Done
-	return nil
 }
