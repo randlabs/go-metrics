@@ -24,27 +24,30 @@ type State struct {
 // -----------------------------------------------------------------------------
 
 func TestWebServer(t *testing.T) {
-	// CreateMetricsWebServer initializes and creates a new web server
+	// Create a new health & metrics controller with a web server
 	srvOpts := metrics.Options{
-		Address:        "127.0.0.1",
-		Port:           3000,
-		HealthCallback: healthCallback,
+		Address:             "127.0.0.1",
+		Port:                3000,
+		HealthCallback:      healthCallback,
+		EnableDebugProfiles: true,
+		IncludeCORS:         true,
+		DisableClientCache:  true,
 	}
-	mws, err := metrics.CreateMetricsWebServer(srvOpts)
+	mc, err := metrics.CreateController(srvOpts)
 	if err != nil {
 		t.Errorf("unable to create web server [%v]", err)
 		return
 	}
 
 	// Create some custom counters
-	err = mws.CreateCounterWithCallback(
+	err = mc.CreateCounterWithCallback(
 		"random_counter", "A random counter",
 		func() float64 {
 			return rand.Float64()
 		},
 	)
 	if err == nil {
-		err = mws.CreateCounterVecWithCallback(
+		err = mc.CreateCounterVecWithCallback(
 			"random_counter_vec", "A random counter vector", []string{"set", "value"},
 			metrics.VectorMetric{
 				{
@@ -70,7 +73,7 @@ func TestWebServer(t *testing.T) {
 	}
 
 	if err == nil {
-		err = mws.CreateGaugeVecWithCallback(
+		err = mc.CreateGaugeVecWithCallback(
 			"random_gauge_vec", "A random gauge vector", []string{"set", "value"},
 			metrics.VectorMetric{
 				{
@@ -99,7 +102,7 @@ func TestWebServer(t *testing.T) {
 	}
 
 	// Start server
-	err = mws.Start()
+	err = mc.Start()
 	if err != nil {
 		t.Errorf("unable to start web server [%v]", err)
 		return
@@ -121,7 +124,7 @@ func TestWebServer(t *testing.T) {
 	fmt.Println("Shutting down...")
 
 	// Stop web server
-	mws.Stop()
+	mc.Destroy()
 }
 
 // -----------------------------------------------------------------------------

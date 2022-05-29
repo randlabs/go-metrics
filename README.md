@@ -1,6 +1,6 @@
 # go-metrics
 
-Health and Metrics web server library for Go
+Health and Metrics controller and web server library for Go
 
 ## Usage with example
 
@@ -10,23 +10,26 @@ package example
 import (
 	"math/rand"
 
-	metrics "github.com/randlabs/go-metrics"
+	"github.com/randlabs/go-metrics"
 )
 
 func main() {
-	// Create a new health & metrics web server
+	// Create a new health & metrics controller with a web server
 	srvOpts := metrics.Options{
-		Address:        "127.0.0.1",
-		Port:           3000,
-		HealthCallback: healthCallback, // Setup our health check callback
+		Address:             "127.0.0.1",
+		Port:                3000,
+		HealthCallback:      healthCallback, // Setup our health check callback
+		EnableDebugProfiles: true,
+		IncludeCORS:         true,
+		DisableClientCache:  true,
 	}
-	mws, err := metrics.CreateMetricsWebServer(srvOpts)
+	mc, err := metrics.CreateController(srvOpts)
 	if err != nil {
 		// handle error
 	}
 
 	// Create a custom prometheus counter
-	err = mws.CreateCounterWithCallback(
+	err = mc.CreateCounterWithCallback(
 		"random_counter", "A random counter",
 		func() float64 {
 			// Return the counter value.
@@ -37,7 +40,7 @@ func main() {
 	)
 
 	// Start health & metrics web server
-	err = mws.Start()
+	err = mc.Start()
 	if err != nil {
 		// handle error
 	}
@@ -45,7 +48,7 @@ func main() {
 	// your app code may go here
 
 	// Stop health & metrics web server before quitting
-	mws.Stop()
+	mc.Destroy()
 }
 
 // Health output is in JSON format. Don't forget to add json tags.
