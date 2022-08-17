@@ -60,8 +60,8 @@ type Options struct {
 	Middlewares []webserver.MiddlewareFunc
 }
 
-// HealthCallback indicates a function that returns an object that will be returned as a JSON output.
-type HealthCallback func() interface{}
+// HealthCallback indicates a function that returns a string that will be returned as the output.
+type HealthCallback func() string
 
 // -----------------------------------------------------------------------------
 

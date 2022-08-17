@@ -1,6 +1,7 @@
 package metrics_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"os"
@@ -129,10 +130,13 @@ func TestWebServer(t *testing.T) {
 
 // -----------------------------------------------------------------------------
 
-func healthCallback() interface{} {
-	return State{
+func healthCallback() string {
+	state := State{
 		System: "all services running",
 	}
+
+	j, _ := json.Marshal(state)
+	return string(j)
 }
 
 func openBrowser(url string) {
