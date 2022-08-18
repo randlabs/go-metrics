@@ -51,16 +51,19 @@ func main() {
 	mc.Destroy()
 }
 
-// Health output is in JSON format. Don't forget to add json tags.
+// Health output will be in JSON format.
 type exampleHealthOutput struct {
 	Status  string `json:"status"`
 }
 
 // Our health callback routine.
-func healthCallback() interface{} {
-	return exampleHealthOutput{
+func healthCallback() string {
+	state := exampleHealthOutput{
 		Status: "ok",
 	}
+
+	j, _ := json.Marshal(state)
+	return string(j)
 }
 ```
 
