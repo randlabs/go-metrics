@@ -10,11 +10,13 @@ import (
 
 func (mws *Controller) getHealthHandler() webserver.HandlerFunc {
 	return func(req *request.RequestContext) error {
-		// Get current state from callback
-		state := mws.healthCallback()
+		// Get current health status from callback
+		status := mws.healthCallback()
 
-		// Encode and send output
-		req.WriteJSON(state)
+		// Send output
+		if len(status) > 0 {
+			req.WriteString(status)
+		}
 		req.Success()
 
 		// Done
