@@ -20,7 +20,6 @@ func (mws *Controller) createAliveMiddleware() webserver.MiddlewareFunc {
 				req.Error("", http.StatusServiceUnavailable)
 				return nil
 			}
-
 		}
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	webserver "github.com/randlabs/go-webserver"
@@ -29,6 +30,9 @@ type Options struct {
 	// If Server is provided, use this server instead of creating a new one.
 	Server *webserver.Server
 
+	// Server name to use when sending response headers. Defaults to 'metrics-server'.
+	Name string
+
 	// Address is the bind address to attach the internal web server.
 	Address string
 
@@ -37,6 +41,9 @@ type Options struct {
 
 	// TLSConfig optionally provides a TLS configuration for use.
 	TLSConfig *tls.Config
+
+	// A callback to call if an error is encountered.
+	ListenErrorHandler webserver.ListenErrorHandler
 
 	// AccessToken is an optional access token required to access the status endpoints.
 	AccessToken string
@@ -65,31 +72,47 @@ type HealthCallback func() string
 
 // -----------------------------------------------------------------------------
 
+const (
+	defaultServerName = "metrics-server"
+)
+
+// -----------------------------------------------------------------------------
+
 // CreateController initializes and creates a new controller
-func CreateController(opts Options) (*Controller, error) {
+func CreateController(options Options) (*Controller, error) {
 	var err error
 
-	if opts.HealthCallback == nil {
+	if options.HealthCallback == nil {
 		return nil, errors.New("invalid health callback")
 	}
 
 	// Create metrics object
 	mws := Controller{
 		rundownProt:    rp.Create(),
-		healthCallback: opts.HealthCallback,
+		healthCallback: options.HealthCallback,
 	}
 
 	// Create webserver
-	if opts.Server != nil {
-		mws.server = opts.Server
+	if options.Server != nil {
+		mws.server = options.Server
 	} else {
+		serverName := options.Name
+		if len(serverName) == 0 {
+			serverName = defaultServerName
+		}
+
 		mws.usingInternalServer = true
 		mws.server, err = webserver.Create(webserver.Options{
-			Name:              "metrics-server",
-			Address:           opts.Address,
-			Port:              opts.Port,
-			EnableCompression: false,
-			TLSConfig:         opts.TLSConfig,
+			Name:               serverName,
+			Address:            options.Address,
+			Port:               options.Port,
+			ReadTimeout:        10 * time.Second, // 10 seconds for reading and writing a metrics request
+			WriteTimeout:       10 * time.Second, // should be enough.
+			MaxRequestBodySize: 512,              // Currently, no POST endpoints but leave a small buffer for future requests.
+			EnableCompression:  false,
+			ListenErrorHandler: options.ListenErrorHandler,
+			TLSConfig:          options.TLSConfig,
+			MinReqFileDescs:    16,
 		})
 		if err != nil {
 			mws.Destroy()
@@ -106,36 +129,37 @@ func CreateController(opts Options) (*Controller, error) {
 
 	// Add middlewares
 	middlewares := make([]webserver.MiddlewareFunc, 0)
-	if len(opts.Middlewares) > 0 {
-		middlewares = append(middlewares, opts.Middlewares...)
+	if len(options.Middlewares) > 0 {
+		middlewares = append(middlewares, options.Middlewares...)
 	}
 	middlewares = append(middlewares, mws.createAliveMiddleware())
-	if opts.DisableClientCache {
+	if options.DisableClientCache {
 		middlewares = append(middlewares, middleware.DisableClientCache())
 	}
-	if opts.IncludeCORS {
+	if options.IncludeCORS {
 		middlewares = append(middlewares, middleware.DefaultCORS())
 	}
 
 	// Create middlewares with authorization
 	middlewaresWithAuth := make([]webserver.MiddlewareFunc, len(middlewares))
 	copy(middlewaresWithAuth, middlewares)
-	if len(opts.AccessToken) > 0 {
-		middlewaresWithAuth = append(middlewaresWithAuth, middleware.ProtectedWithToken(opts.AccessToken))
+	if len(options.AccessToken) > 0 {
+		middlewaresWithAuth = append(middlewaresWithAuth, middleware.ProtectedWithToken(options.AccessToken))
 	}
 
 	// Add health handler to web server
-	if opts.RequestAccessTokenInHealth {
-		mws.server.GET("/health", mws.getHealthHandler(), middlewaresWithAuth...)
-	} else {
-		mws.server.GET("/health", mws.getHealthHandler(), middlewares...)
+	m := middlewares
+	if options.RequestAccessTokenInHealth {
+		m = middlewaresWithAuth
 	}
+	mws.server.GET("/health", mws.getHealthHandler(), m...)
+	mws.server.HEAD("/health", mws.getHealthHandler(), m...)
 
 	// Add metrics handler to web server
 	mws.server.GET("/metrics", mws.getMetricsHandler(), middlewaresWithAuth...)
 
 	// Add debug profiles handler to web server
-	if opts.EnableDebugProfiles {
+	if options.EnableDebugProfiles {
 		mws.server.ServeDebugProfiles("/debug/pprof", middlewaresWithAuth...)
 	}
 
