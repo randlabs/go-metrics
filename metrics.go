@@ -106,8 +106,8 @@ func CreateController(options Options) (*Controller, error) {
 			Name:               serverName,
 			Address:            options.Address,
 			Port:               options.Port,
-			ReadTimeout:        10 * time.Second, // 10 seconds for reading and writing a metrics request
-			WriteTimeout:       10 * time.Second, // should be enough.
+			ReadTimeout:        10 * time.Second, // 10 seconds for reading a metrics request
+			WriteTimeout:       time.Minute,      // and 1 minute for write
 			MaxRequestBodySize: 512,              // Currently, no POST endpoints but leave a small buffer for future requests.
 			EnableCompression:  false,
 			ListenErrorHandler: options.ListenErrorHandler,
