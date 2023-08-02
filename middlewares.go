@@ -12,14 +12,14 @@ import (
 func (mws *Controller) createAliveMiddleware() webserver.MiddlewareFunc {
 	return func(next webserver.HandlerFunc) webserver.HandlerFunc {
 		return func(req *request.RequestContext) error {
-			if mws.rundownProt.Acquire() {
-				err := next(req)
-				mws.rundownProt.Release()
-				return err
-			} else {
-				req.Error("", http.StatusServiceUnavailable)
+			// Process the request if we are not shutting down
+			if !mws.rundownProt.Acquire() {
+				req.Error(http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
 				return nil
 			}
+			defer mws.rundownProt.Release()
+
+			return next(req)
 		}
 	}
 }

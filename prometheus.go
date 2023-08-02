@@ -19,6 +19,7 @@ type VectorMetric []struct {
 
 // -----------------------------------------------------------------------------
 
+// CreateCounterWithCallback creates a single counter metric where its data is populated by calling a callback
 func (mws *Controller) CreateCounterWithCallback(name string, help string, handler ValueHandler) error {
 	coll := prometheus.NewCounterFunc(
 		prometheus.CounterOpts{
@@ -30,6 +31,7 @@ func (mws *Controller) CreateCounterWithCallback(name string, help string, handl
 	return mws.registry.Register(coll)
 }
 
+// CreateCounterVecWithCallback creates a vector of counters metric where their data are populated by calling a callback
 func (mws *Controller) CreateCounterVecWithCallback(
 	name string, help string, variableLabels []string, subItems VectorMetric,
 ) error {
@@ -66,6 +68,7 @@ func (mws *Controller) CreateCounterVecWithCallback(
 	return mws.registry.Register(coll)
 }
 
+// CreateGaugeWithCallback creates a single gauge metric where its data is populated by calling a callback
 func (mws *Controller) CreateGaugeWithCallback(name string, help string, handler ValueHandler) error {
 	coll := prometheus.NewGaugeFunc(
 		prometheus.GaugeOpts{
@@ -77,6 +80,7 @@ func (mws *Controller) CreateGaugeWithCallback(name string, help string, handler
 	return mws.registry.Register(coll)
 }
 
+// CreateGaugeVecWithCallback creates a vector of gauges metric where their data are populated by calling a callback
 func (mws *Controller) CreateGaugeVecWithCallback(
 	name string, help string, variableLabels []string, subItems VectorMetric,
 ) error {
