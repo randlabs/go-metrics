@@ -15,6 +15,8 @@ const (
 	strContentTypeApplicationJSON = "application/json"
 )
 
+// -----------------------------------------------------------------------------
+
 func (mws *Controller) getHealthHandler() webserver.HandlerFunc {
 	return func(req *request.RequestContext) error {
 		// Get current health status from callback
@@ -44,7 +46,8 @@ func (mws *Controller) getMetricsHandler() webserver.HandlerFunc {
 	return webserver.HandlerFromHttpHandler(promhttp.HandlerFor(
 		mws.registry,
 		promhttp.HandlerOpts{
-			EnableOpenMetrics: true,
+			EnableOpenMetrics:   true,
+			MaxRequestsInFlight: 5,
 		},
 	))
 }
