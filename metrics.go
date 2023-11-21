@@ -11,14 +11,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	webserver "github.com/randlabs/go-webserver"
 	"github.com/randlabs/go-webserver/middleware"
-	rp "github.com/randlabs/rundown-protection"
+	"github.com/randlabs/rundown-protection"
 )
 
 // -----------------------------------------------------------------------------
 
 // Controller holds details about a metrics monitor instance.
 type Controller struct {
-	rundownProt         *rp.RundownProtection
+	rp                  *rundown_protection.RundownProtection
 	server              *webserver.Server
 	usingInternalServer bool
 	registry            *prometheus.Registry
@@ -88,7 +88,7 @@ func CreateController(options Options) (*Controller, error) {
 
 	// Create metrics object
 	mws := Controller{
-		rundownProt:    rp.Create(),
+		rp:             rundown_protection.Create(),
 		healthCallback: options.HealthCallback,
 	}
 
@@ -181,7 +181,7 @@ func (mws *Controller) Start() error {
 // Destroy destroys the monitor and stops the internal web server
 func (mws *Controller) Destroy() {
 	// Initiate shutdown
-	mws.rundownProt.Wait()
+	mws.rp.Wait()
 
 	// Cleanup
 	if mws.server != nil {
