@@ -118,8 +118,8 @@ func TestWebServer(t *testing.T) {
 
 	select {
 	case <-c:
-		// NOTE: By default, tests cannot last more than 10 minutes.
-	case <-time.After(5 * time.Minute):
+		// Shutdown after a minute
+	case <-time.After(1 * time.Minute):
 	}
 
 	fmt.Println("Shutting down...")
