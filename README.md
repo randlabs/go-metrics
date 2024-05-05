@@ -1,3 +1,7 @@
+# DEPRECATION NOTE
+
+This library is deprecated. Now it is part of [`Go-WebServer`](https://github.com/randlabs/go-webserver) version 2.
+
 # go-metrics
 
 Health and Metrics controller and web server library for Go
